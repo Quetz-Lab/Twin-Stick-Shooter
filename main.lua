@@ -12,13 +12,18 @@ player = {
 
 local bullets = {}
 
+--Ya estoy harto
+
 function shoot()
     bullets = {
         bullet(10)
+
     }
 
 
 end
+
+ 
 
 function love.load()
     love.graphics.setBackgroundColor(0.1, 0.1, 0.1)
@@ -27,10 +32,13 @@ end
 function love.update(dt)
     -- Movimiento con teclado
     local moveX, moveY = 0, 0
+    
+
     if love.keyboard.isDown("w") then moveY = moveY - 1 end
     if love.keyboard.isDown("s") then moveY = moveY + 1 end
     if love.keyboard.isDown("a") then moveX = moveX - 1 end
     if love.keyboard.isDown("d") then moveX = moveX + 1 end
+    if love.mousepressed.isDown("right") then shoot() end
 
     -- Normalizar dirección
     local length = math.sqrt(moveX^2 + moveY^2)
@@ -46,6 +54,9 @@ function love.update(dt)
     -- Dirección de disparo (stick derecho simulado con mouse)
     player.aimX = love.mouse.getX()
     player.aimY = love.mouse.getY()
+
+    for i = 1, #bullets do 
+        if bullets[i] --aca que sigue xd 
 end
 
 function love.draw()
