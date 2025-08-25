@@ -1,3 +1,5 @@
+local love = require "love"
+local bullet = require "bullet"
 -- Player module
 player = {
     x = 400,
@@ -7,6 +9,16 @@ player = {
     aimX = 0,
     aimY = 0
 }
+
+local bullets = {}
+
+function shoot()
+    bullets = {
+        bullet(10)
+    }
+
+
+end
 
 function love.load()
     love.graphics.setBackgroundColor(0.1, 0.1, 0.1)
