@@ -62,6 +62,16 @@ function love.load()
 
 end
 
+local function IsCollision( x1,x2,y1,y2)
+    distance = math.sqrt(math.pow((x1 - x2), 2 )+ math.pow((y1-y2),2))
+     if distance < 20 then
+        return true
+     else
+        return false
+    end
+end
+
+
 function love.update(dt)
     if game.state["running"]then
         -- Movimiento con teclado
@@ -95,6 +105,10 @@ function love.update(dt)
 
         for i = 1, #enemies do
             enemies [i] : move(player.x, player.y)
+            if IsCollision(player.x, enemies[i].x, player.y, enemies[i].y) then
+                game.state["menu"] = true
+                game.state["running"] = false
+            end
             for i = 1, #game.levels do
                 if math.floor(game.points) == game.levels[i] then
                     table.insert(enemies,1,enemy(game.level*(i+1)))
