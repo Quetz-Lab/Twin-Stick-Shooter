@@ -1,5 +1,5 @@
 local love = require "love"
-local bullet = require "bullet"
+local Bullet = require "bullet"
 -- Player module
 player = {
     x = 400,
@@ -12,15 +12,15 @@ player = {
 
 local bullets = {}
 
---Ya estoy harto
-
+-- Disparar
 function shoot()
-    bullets = {
-        bullet(10)
+    local dirX = player.aimX - player.x
+    local dirY = player.aimY - player.y
+    table.insert(bullets, Bullet:new(player.x, player.y, dirX, dirY))
+end
 
-    }
-
-
+function love.load()
+    love.graphics.setBackgroundColor(0.1, 0.1, 0.1)
 end
 
  
@@ -55,9 +55,25 @@ function love.update(dt)
     player.aimX = love.mouse.getX()
     player.aimY = love.mouse.getY()
 
-    for i = 1, #bullets do 
-        if bullets[i] --aca que sigue xd 
+        -- Actualizar balas
+    for i = #bullets, 1, -1 do
+        local b = bullets[i]
+        b:update(dt)
+
+        -- Si la bala se sale de la pantalla, eliminarla
+        if b.x < 0 or b.x > love.graphics.getWidth() or b.y < 0 or b.y > love.graphics.getHeight() then
+            table.remove(bullets, i)
+        end
+    end
 end
+
+-- Detectar click derecho para disparar
+function love.mousepressed(mx, my, button)
+    if button == 2 then -- botón derecho
+        shoot()
+    end
+end
+
 
 function love.draw()
     -- Dibujar jugador
@@ -67,4 +83,9 @@ function love.draw()
     -- Dibujar línea de apuntado
     love.graphics.setColor(1, 1, 1)
     love.graphics.line(player.x, player.y, player.aimX, player.aimY)
+
+    -- Dibujar balas
+    for _, b in ipairs(bullets) do
+        b:draw()
+    end
 end
