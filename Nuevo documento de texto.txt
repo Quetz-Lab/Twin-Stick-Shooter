@@ -1,7 +1,0 @@
- -- Dibujar jugador
-    love.graphics.setColor(0.8, 0.2, 0.2)
-    love.graphics.circle("fill", player.x, player.y, player.radius)
-
-    -- Dibujar línea de apuntado
-    love.graphics.setColor(1, 1, 1)
-    love.graphics.line(player.x, player.y, player.aimX, player.aimY)
