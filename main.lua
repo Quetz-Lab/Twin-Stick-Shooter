@@ -1,189 +1,248 @@
+-- main.lua (MOD sobre tus archivos)
 local love = require "love"
 local bullet = require "bullet"
 local enemy = require "enemy"
 local button = require "Button"
--- player module
+local Pickup = require "pickup"
+
+-- Estados del juego
+local STATE_MENU = "menu"
+local STATE_PLAY = "playing"
+local STATE_OVER = "gameover"
+local gameState = STATE_MENU
+
+-- Jugador
 player = {
-    x = 400,
-    y = 300,
-    speed = 200,
+    x = 400, y = 300,
+    speed = 220,
     radius = 20,
-    aimX = 0,
-    aimY = 0
+    ammo = 20,
+    lives = 3,
+    invuln = 0,
+    fireCD = 0.12,
+    fireT = 0
 }
 
+-- Pools
 local bullets = {}
 local enemies = {}
-local buttons = {
-    menuState = {}
-}
-local game = {
-    level = 1,
-    state = {
-        menu = true,
-        pause = false,
-        running = false,
-        ended = false
-    },
-    points = 0,
-    levels = {
-        5,10,15,20
-    }
-}
+local pickups = {}
 
-local function StartGame()
-    game.state["menu"] = false
-    game.state["running"]=true
-    enemies = {
-        enemy(1)
-    }
-end
+local score = 0
+local timeAlive = 0
+local spawnTimer = 0
+local spawnEvery = 1.0
 
--- Disparar
-function shoot()
-    local dirX = player.aimX - player.x
-    local dirY = player.aimY - player.y
-    table.insert(bullets, bullet:new(player.x, player.y, dirX, dirY))
-end
+-- UI
+local startBtn = button({ x = 300, y = 360, w = 200, h = 40, text = "Empezar",
+    onClick = function() love.keypressed("return") end
+})
+local restartBtn = button({ x = 300, y = 400, w = 200, h = 40, text = "Reiniciar",
+    onClick = function() love.keypressed("return") end
+})
 
-function love.load()
-    love.graphics.setBackgroundColor(0.1, 0.1, 0.1)
-end
+local function len(x,y) return math.sqrt(x*x + y*y) end
+local function clamp(v, lo, hi) if v<lo then return lo elseif v>hi then return v>hi and hi or v end end
 
- 
-
-function love.load()
-    love.graphics.setBackgroundColor(0.1, 0.1, 0.1)
-    love.mouse.setVisible(false)
-    love.window.setTitle("TwinStickShooter")
-    table.insert(enemies,1,enemy())
-    buttons.menuState.playeGame = Button("Play", StartGame,nil,120,40)
-    buttons.menuState.quitGame = Button("Quit",love.event.quit,nil,120,40)
-
-end
-
-local function IsCollision( x1,x2,y1,y2)
-    distance = math.sqrt(math.pow((x1 - x2), 2 )+ math.pow((y1-y2),2))
-     if distance < 20 then
-        return true
-     else
-        return false
+local function getInactive(tbl, factory)
+    for i=1,#tbl do
+        if not tbl[i].active then return tbl[i] end
     end
+    local obj = factory()
+    table.insert(tbl, obj)
+    return obj
 end
 
+local function resetGame()
+    player.x, player.y = 400, 300
+    player.ammo = 20
+    player.lives = 3
+    player.invuln = 0
+    player.fireT = 0
+    score = 0
+    timeAlive = 0
+    spawnTimer = 0
+    spawnEvery = 1.0
+    for _,b in ipairs(bullets) do b.active = false end
+    for _,e in ipairs(enemies) do e.active = false end
+    for _,p in ipairs(pickups) do p.active = false end
+end
+
+local function startGame()
+    resetGame()
+    gameState = STATE_PLAY
+end
+
+local function circleOverlap(ax,ay,ar, bx,by,br)
+    local dx,dy = ax-bx, ay-by
+    return dx*dx + dy*dy <= (ar+br)*(ar+br)
+end
+
+local function spawnEnemy()
+    local W, H = love.graphics.getWidth(), love.graphics.getHeight()
+    local side = love.math.random(4)
+    local ex,ey
+    if side==1 then ex,ey = -20, love.math.random(0,H) -- izq
+    elseif side==2 then ex,ey = W+20, love.math.random(0,H) -- der
+    elseif side==3 then ex,ey = love.math.random(0,W), -20 -- arriba
+    else ex,ey = love.math.random(0,W), H+20 end -- abajo
+    local e = getInactive(enemies, function() return enemy() end)
+    e:reset(ex,ey)
+    e.active = true
+end
+
+local function shoot(mx,my)
+    if player.ammo<=0 or player.fireT>0 then return end
+    local bx,by = player.x, player.y
+    local dx,dy = mx-bx, my-by
+    local l = len(dx,dy)
+    if l==0 then return end
+    dx,dy = dx/l, dy/l
+    local b = getInactive(bullets, function() return bullet(0) end)
+    b:reset(bx,by,dx,dy)
+    b.active = true
+    player.ammo = player.ammo - 1
+    player.fireT = player.fireCD
+end
+
+function love.load()
+    love.window.setMode(800,600)
+    love.window.setTitle("Twin-Stick Shooter")
+end
 
 function love.update(dt)
-    if game.state["running"]then
-        -- Movimiento con teclado
-        local moveX, moveY = 0, 0
-    
+    if gameState ~= STATE_PLAY then return end
 
-        if love.keyboard.isDown("w") then moveY = moveY - 1 end
-        if love.keyboard.isDown("s") then moveY = moveY + 1 end
-        if love.keyboard.isDown("a") then moveX = moveX - 1 end
-        if love.keyboard.isDown("d") then moveX = moveX + 1 end
-    --if love.mousepressed.isDown("right") then shoot() end
+    if player.fireT>0 then player.fireT = math.max(0, player.fireT - dt) end
+    if player.invuln>0 then player.invuln = math.max(0, player.invuln - dt) end
 
+    timeAlive = timeAlive + dt
+    spawnTimer = spawnTimer + dt
+    if spawnTimer >= spawnEvery then
+        spawnTimer = 0
+        spawnEvery = math.max(0.35, spawnEvery * 0.98)
+        spawnEnemy()
+        if math.random()<0.5 then spawnEnemy() end
+    end
 
+    -- Movimiento
+    local mx,my = 0,0
+    if love.keyboard.isDown("w") then my = my - 1 end
+    if love.keyboard.isDown("s") then my = my + 1 end
+    if love.keyboard.isDown("a") then mx = mx - 1 end
+    if love.keyboard.isDown("d") then mx = mx + 1 end
+    local l = len(mx,my)
+    if l>0 then mx,my = mx/l, my/l end
+    player.x = player.x + mx * player.speed * dt
+    player.y = player.y + my * player.speed * dt
 
+    -- Disparo continuo con mouse
+    if love.mouse.isDown(1) then
+        local x,y = love.mouse.getPosition()
+        shoot(x,y)
+    end
 
-        -- Normalizar dirección
-        local length = math.sqrt(moveX^2 + moveY^2)
-        if length > 0 then
-            moveX = moveX / length
-            moveY = moveY / length
-        end
+    -- Bullets
+    local W,H = love.graphics.getWidth(), love.graphics.getHeight()
+    for _,b in ipairs(bullets) do
+        if b.active then b:update(dt,W,H) end
+    end
 
-        -- Aplicar movimiento
-        player.x = player.x + moveX * player.speed * dt
-        player.y = player.y + moveY * player.speed * dt
-
-        -- Dirección de disparo (stick derecho simulado con mouse)
-        player.aimX = love.mouse.getX()
-        player.aimY = love.mouse.getY()
-
-
-        for i = 1, #enemies do
-            enemies [i] : move(player.x, player.y)
-            if IsCollision(player.x, enemies[i].x, player.y, enemies[i].y) then
-                game.state["menu"] = true
-                game.state["running"] = false
-            end
-            for i = 1, #game.levels do
-                if math.floor(game.points) == game.levels[i] then
-                    table.insert(enemies,1,enemy(game.level*(i+1)))
-                    game.points = game.points+1
+    -- Enemigos y colisiones
+    for _,e in ipairs(enemies) do
+        if e.active then
+            e:update(dt, player.x, player.y)
+            -- choque con jugador
+            if circleOverlap(e.x,e.y,e.radius, player.x,player.y,player.radius) and player.invuln<=0 then
+                player.lives = player.lives - 1
+                player.invuln = 1.0
+                if player.lives <= 0 then
+                    gameState = STATE_OVER
                 end
             end
-        end
-            game.points = game.points + dt
- 
-            -- Actualizar balas
-        for i = #bullets, 1, -1 do
-            local b = bullets[i]
-            b:update(dt)
-
-            -- Si la bala se sale de la pantalla, eliminarla
-            if b.x < 0 or b.x > love.graphics.getWidth() or b.y < 0 or b.y > love.graphics.getHeight() then
-            table.remove(bullets, i)
-            end
-        end
-    end
-    
-    if game.state["menu"] then
-        player.x,player.y = love.mouse.getPosition()
-    end
-end
-
-    
-
-
--- Detectar click derecho para disparar
-function love.mousepressed(mx, my, button, touch)
-    if button == 2 then -- botón derecho
-        shoot()
-    end
-     if not game.state["running"]then
-        if button == 1 then
-            if game.state["menu"]then
-                for index in pairs(buttons.menuState) do
-                    buttons.menuState[index]:checkPress(mx,my,player.radius)
+            -- choque bala/enemigo
+            for _,b in ipairs(bullets) do
+                if b.active and circleOverlap(e.x,e.y,e.radius, b.x,b.y,b.radius) then
+                    e.active = false
+                    b.active = false
+                    score = score + 10
+                    -- drop pickup
+                    local p = getInactive(pickups, function() return Pickup() end)
+                    p:reset(e.x, e.y)
+                    p.active = true
+                    break
                 end
             end
         end
     end
-end
 
+    -- Pickups
+    for _,p in ipairs(pickups) do
+        if p.active then
+            p:update(dt)
+            if circleOverlap(p.x,p.y,p.radius, player.x,player.y,player.radius) then
+                p.active = false
+                player.ammo = player.ammo + p.amount
+            end
+        end
+    end
+end
 
 function love.draw()
-   
-    -- Dibujar balas
-    for _, b in ipairs(bullets) do
-        b:draw()
+    local W,H = love.graphics.getWidth(), love.graphics.getHeight()
+    if gameState == STATE_MENU then
+        love.graphics.printf("Twin-Stick Shooter", 0, H/2 - 60, W, "center")
+        love.graphics.printf("WASD: mover\nClick izquierdo: disparar\nEnter: empezar", 0, H/2 - 10, W, "center")
+        startBtn:draw()
+        return
+    elseif gameState == STATE_OVER then
+        love.graphics.printf("GAME OVER", 0, H/2 - 60, W, "center")
+        love.graphics.printf(("Puntaje: %d   Tiempo: %ds"):format(score, math.floor(timeAlive)), 0, H/2 - 20, W, "center")
+        love.graphics.printf("Enter para reiniciar", 0, H/2 + 10, W, "center")
+        restartBtn:draw()
+        return
     end
-     love.graphics.printf("Points: " ..game.points,love.graphics.newFont(16),10,love.graphics.getHeight()-60,love.graphics.getWidth())
-     love.graphics.printf("FPS: " ..love.timer.getFPS(),love.graphics.newFont(16),10,love.graphics.getHeight()-30,love.graphics.getWidth())
-     --love,graphics.setColor(1,1,1)
-    if game.state["running"]then
-         -- Dibujar jugador
-        love.graphics.setColor(0.8, 0.2, 0.2)
-        love.graphics.circle("fill", player.x, player.y, player.radius)
 
-    -- Dibujar línea de apuntado
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.line(player.x, player.y, player.aimX, player.aimY)
+    -- Draw pickups
+    for _,p in ipairs(pickups) do if p.active then p:draw() end end
+    -- Draw enemies
+    for _,e in ipairs(enemies) do if e.active then e:draw() end end
+    -- Draw bullets
+    for _,b in ipairs(bullets) do if b.active then b:draw() end end
 
-        for i = 1, #enemies do
-            enemies[i]:draw()
+    -- Player (blink if invulnerable)
+    if player.invuln>0 then
+        local a = 0.4 + 0.6 * math.cos(love.timer.getTime()*20)
+        love.graphics.setColor(1,1,1, math.abs(a))
+    else
+        love.graphics.setColor(1,1,1,1)
+    end
+    love.graphics.circle("line", player.x, player.y, player.radius)
+    love.graphics.setColor(1,1,1,1)
+
+    -- HUD
+    love.graphics.print(("Puntaje: %d"):format(score), 10, 10)
+    love.graphics.print(("Tiempo: %ds"):format(math.floor(timeAlive)), 10, 28)
+    love.graphics.print(("Balas: %d"):format(player.ammo), 10, 46)
+    love.graphics.print(("Vidas: %d"):format(player.lives), 10, 64)
+end
+
+function love.mousepressed(x,y,button)
+    if gameState == STATE_MENU then
+        startBtn:mousepressed(x,y,button)
+    elseif gameState == STATE_OVER then
+        restartBtn:mousepressed(x,y,button)
+    elseif gameState == STATE_PLAY and button==1 then
+        shoot(x,y)
+    end
+end
+
+function love.keypressed(key)
+    if key == "return" then
+        if gameState == STATE_MENU or gameState == STATE_OVER then
+            startGame()
         end
-        --love.graphics.circle("fill",player.x,player.y,player.radius)
-    
-    elseif game.state["menu"]then
-    buttons.menuState.playeGame:draw(10,20,17,10)
-    buttons.menuState.quitGame:draw(80,80,51,10)
+    elseif key == "escape" and gameState == STATE_PLAY then
+        gameState = STATE_MENU
     end
-     if not game.state["running"] then
-        love.graphics.circle("fill",player.x,player.y,player.radius/2)
-    end
-    
 end

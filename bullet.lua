@@ -1,44 +1,40 @@
+-- bullet.lua
 local love = require "love"
 
 -- bullet.lua
-local Bullet = {}
-Bullet.__index = Bullet
+local function Bullet()
+    return {
+        x = 0, y = 0,
+        radius = 4,
+        dx = 0, dy = 0,
+        speed = 480,
+        life = 0, maxLife = 2.0,
+        active = false,
 
--- Constructor de la bala
-function Bullet:new(x, y, dirX, dirY)
-    local self = setmetatable({}, Bullet)
-    self.x = x
-    self.y = y
-    self.radius = 5
-    self.speed = 400
-    self.isActive = true
+        reset = function(self, x, y, dx, dy)
+            self.x, self.y = x, y
+            self.dx, self.dy = dx, dy
+            self.life = 0
+            self.active = true
+        end,
 
-    -- Normalizar dirección
-    local len = math.sqrt(dirX^2 + dirY^2)
-    if len > 0 then
-        self.dirX = dirX / len
-        self.dirY = dirY / len
-    else
-        self.dirX, self.dirY = 0, -1
-    end
+        update = function(self, dt, W, H)
+            if not self.active then return end
+            self.x = self.x + self.dx * self.speed * dt
+            self.y = self.y + self.dy * self.speed * dt
+            self.life = self.life + dt
+            if self.life >= self.maxLife or self.x<-10 or self.y<-10 or self.x>W+10 or self.y>H+10 then
+                self.active = false
+            end
+        end,
 
-    return self
-end
-
--- Actualizar la posición de la bala
-function Bullet:update(dt)
-    if self.isActive then
-        self.x = self.x + self.dirX * self.speed * dt
-        self.y = self.y + self.dirY * self.speed * dt
-    end
-end
-
--- Dibujar la bala
-function Bullet:draw()
-    if self.isActive then
-        love.graphics.setColor(1, 0.2, 0.2)
-        love.graphics.circle("fill", self.x, self.y, self.radius)
-    end
+        draw = function(self)
+            if not self.active then return end
+            love.graphics.setColor(1,1,0.3)
+            love.graphics.circle("fill", self.x, self.y, self.radius)
+            love.graphics.setColor(1,1,1)
+        end
+    }
 end
 
 return Bullet

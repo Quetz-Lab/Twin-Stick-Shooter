@@ -1,49 +1,35 @@
+-- enemy.lua (MOD pooling)
 local love = require "love"
 
 function enemy()
-    local dice = math.random(1,4)
-    local eX, eY
-    local eRadius = 20
-
-    if dice == 1 then
-        eX = math.random(eRadius,love.graphics.getWidth())
-        eY = eRadius * 4
-    elseif dice == 2 then
-        eX = eRadius * 4
-        eY = math.random(eRadius,love.graphics.getHeight())
-    elseif dice == 3 then 
-        eX = math.random(eRadius,love.graphics.getWidth())
-        eY = love.graphics.getHeight()+(eRadius*4)
-    else 
-        eX = love.graphics.getWidth()+(eRadius*4)
-        eY = math.random(eRadius,love.graphics.getHeight())
-    end
-
     return {
-        radius = eRadius,
-        level = 1,
-        x = eX,
-        y = eY,
+        x = 100, y = 100,
+        radius = 14,
+        level = 2,
+        speed = 90,
+        active = false,
 
-        move = function(self,playerX,playerY)
-            if playerX -self.x > 0 then
-                self.x = self.x+self.level
-            elseif playerX-self.x < 0 then
-                self.x = self.x-self.level
-            end
-             if playerY -self.y > 0 then
-                self.y = self.y+self.level
-            elseif playerY-self.y < 0 then
-                self.y = self.y-self.level
-            end
+        reset = function(self, x, y)
+            self.x, self.y = x, y
+            self.speed = 90 + love.math.random()*60
+            self.active = true
+        end,
+
+        update = function(self, dt, playerX, playerY)
+            if not self.active then return end
+            local dx, dy = playerX - self.x, playerY - self.y
+            local l = math.sqrt(dx*dx + dy*dy)
+            if l>0 then dx, dy = dx/l, dy/l end
+            self.x = self.x + dx * self.speed * dt
+            self.y = self.y + dy * self.speed * dt
         end,
 
         draw = function(self)
+            if not self.active then return end
             love.graphics.setColor(1,.3,.5)
             love.graphics.circle("fill",self.x,self.y,self.radius)
             love.graphics.setColor(1,1,1)
         end,
-
     }
 end
 
